@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>DeadShape</title>
+<style>
+  :root{--ui-size:60px}
+  html,body{height:100%;margin:0;font-family:Inter,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color: transparent;}
+  #gameWrap{position:fixed;inset:0;background:green;display:flex;align-items:stretch;justify-content:center}
+  canvas{display:block;width:100%;height:100%;}
+  #ui {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+  .menu {
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45);
+    flex-direction:column; gap:12px; z-index:40; font-size:18px; color:#fff;
+  }
+  .menu .box {background:#222; padding:20px;border-radius:12px; text-align:center; width:90%; max-width:420px;}
+  .menu button {pointer-events:auto; font-size:18px; padding:10px 16px; margin:6px; border-radius:8px; border: none; cursor:pointer;}
+  .hud { position:absolute; left:12px; top:12px; color:#000; font-weight:bold; font-size:18px; background: rgba(255,255,255,0.75); padding:6px 8px; border-radius:8px; pointer-events:none;}
+  #controls { position:absolute; right:12px; bottom:12px; width: calc(var(--ui-size)*2 + 20px); pointer-events:auto; }
+  #controls .col { display:flex; flex-direction:column; gap:8px; align-items:center; }
+  #controls button { width:var(--ui-size); height:var(--ui-size); border-radius:12px; font-size:22px; border:none; background:rgba(255,255,255,0.95);}
+  #shootBtn { position:absolute; left:12px; bottom:12px; pointer-events:auto; width:calc(var(--ui-size)*1.2); height:calc(var(--ui-size)*1.2); font-size:20px; border-radius:14px;}
+  .small { font-size:12px; padding:6px 8px; }
+  #soundToggle { position:absolute; right:12px; top:12px; pointer-events:auto; }
+  .floatingHint { position:absolute; left:50%; transform:translateX(-50%); bottom:20px; color:#fff; font-size:12px; background:rgba(0,0,0,0.5); padding:6px 10px; border-radius:12px;}
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="c"></canvas>
+  <div id="ui">
+    <div id="menu" class="menu">
+      <div class="box">
+        <h1>DeadShape</h1>
+        <p>Upgraded — Pick mode</p>
+        <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
+          <button onclick="startGame('easy')">Easy</button>
+          <button onclick="startGame('medium')">Medium</button>
+          <button onclick="startGame('hard')">Hard</button>
+          <button onclick="startEndless()">Endless</button>
+        </div>
+        <hr style="opacity:.2;margin:12px 0" />
+        <div style="display:flex;gap:8px;justify-content:center">
+          <label style="font-size:14px;color:#ddd">Volume</label>
+          <input id="vol" type="range" min="0" max="1" step="0.01" value="0.6" style="width:140px" onchange="setVolume(this.value)" />
+        </div>
+        <div style="margin-top:10px;color:#ccc;font-size:13px">High Score: <span id="hs">0</span></div>
+        <div style="margin-top:10px;">
+          <button onclick="showHow()" class="small">How to Play</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="victoryScreen" class="menu" style="display:none;">
+      <div class="box">
+        <h1>VICTORY!</h1>
+        <p>Congratulations, you cleared the area!</p>
+        <p>Your Score: <span id="victoryScore">0</span></p>
+        <button onclick="returnToMenu()">Return to Menu</button>
+      </div>
+    </div>
+
+    <div class="hud" id="hud">Health: 3 &nbsp; Score: 0</div>
+
+    <div id="controls">
+      <div class="col">
+        <button id="up">↑</button>
+        <div style="display:flex;gap:8px">
+          <button id="left">←</button>
+          <button id="down">↓</button>
+          <button id="right">→</button>
+        </div>
+      </div>
+    </div>
+
+    <button id="shootBtn">Shoot</button>
+    <button id="soundToggle" class="small">Sound: On</button>
+    <div class="floatingHint">Tap controls or use keyboard. Hold arrows to move.</div>
+  </div>
+</div>
+
+<!-- Audio placeholders (put your actual files in same folder and adjust names) -->
+<audio id="bg" src="bg_music.mp3" loop preload="auto"></audio>
+<audio id="sndShoot" src="shoot.wav" preload="auto"></audio>
+<audio id="sndHit" src="hit.wav" preload="auto"></audio>
+<audio id="sndExpl" src="explosion.wav" preload="auto"></audio>
+<audio id="sndPower" src="powerup.wav" preload="auto"></audio>
+
+<script>
+/* ===========================
+   Advanced CircleShooter.lite
+   Features: enemy types, boss, power-ups,
+   particles, sounds, scoring, high score, endless scaling
+   =========================== */
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+function fit() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+fit();
+addEventListener('resize', fit);
+
+// Game state
+let player = { x: innerWidth/2, y: innerHeight/2, r: 20, speed: 5, health: 3, shield:0 };
+let enemies = [], bullets = [], particles = [], powerUps = [];
+let gameRunning = false, endless = false;
+let totalToSpawn = 35;
+let score = 0;
+let highScore = parseInt(localStorage.getItem('cs_high')||'0',10);
+document.getElementById('hs').innerText = highScore;
+let spawnTimer = 0, spawnRate = 0;
+let endlessInterval = null;
+let volume = parseFloat(document.getElementById('vol').value);
+let soundOn = true;
+
+// Audio elements
+const bg = document.getElementById('bg');
+const sndShoot = document.getElementById('sndShoot');
+const sndHit = document.getElementById('sndHit');
+const sndExpl = document.getElementById('sndExpl');
+const sndPower = document.getElementById('sndPower');
+function setVolume(v){
+  volume = parseFloat(v);
+  [bg, sndShoot, sndHit, sndExpl, sndPower].forEach(a => a.volume = volume);
+}
+setVolume(volume);
+
+// control state
+const keys = {};
+const btnMap = { ArrowUp:'up', ArrowDown:'down', ArrowLeft:'left', ArrowRight:'right' };
+['keydown','keyup'].forEach(ev => window.addEventListener(ev, e => {
+  if(ev==='keydown') keys[e.key]=true; else keys[e.key]=false;
+}));
+
+// touch buttons
+['up','down','left','right'].forEach(id=>{
+  const b = document.getElementById(id);
+  b.addEventListener('touchstart', e=>{ keys[id]=true; e.preventDefault(); });
+  b.addEventListener('touchend', e=>{ keys[id]=false; e.preventDefault(); });
+  b.addEventListener('mousedown', e=>{ keys[id]=true; });
+  b.addEventListener('mouseup', e=>{ keys[id]=false; });
+});
+
+// shoot button (tap)
+const shootBtn = document.getElementById('shootBtn');
+shootBtn.addEventListener('touchstart', e=>{ shoot(); e.preventDefault(); });
+shootBtn.addEventListener('mousedown', e=>{ shoot(); });
+
+// sound toggle
+document.getElementById('soundToggle').addEventListener('click', ()=>{
+  soundOn = !soundOn;
+  document.getElementById('soundToggle').innerText = 'Sound: ' + (soundOn?'On':'Off');
+  if(!soundOn) { bg.pause(); } else { if(gameRunning) bg.play().catch(()=>{}); }
+});
+
+// helper utilities
+function rand(min,max){ return Math.random()*(max-min)+min; }
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+function playSnd(a){ if(!soundOn) return; a.currentTime=0; a.play().catch(()=>{}); }
+
+// spawn enemies far away (300-600)
+function spawnEnemy(type='normal') {
+  const angle = Math.random()*Math.PI*2;
+  const d = 350 + Math.random()*350;
+  const x = player.x + Math.cos(angle)*d;
+  const y = player.y + Math.sin(angle)*d;
+  let e = { x,y, size:20, speed:1 + Math.random()*0.6, type, hp:1, shooterTimer:0 };
+  if(type==='fast'){ e.speed = 1.6 + Math.random()*0.6; e.size=16; e.hp=1; }
+  if(type==='tank'){ e.speed = 0.6 + Math.random()*0.3; e.size=28; e.hp=3; }
+  if(type==='shooter'){ e.speed = 0.9; e.size=22; e.hp=2; e.shooterTimer = rand(0,2); }
+  enemies.push(e);
+}
+
+// initial spawn set
+function initSpawn(count) {
+  enemies = [];
+  for(let i=0;i<count;i++){
+    // mix types based on difficulty/scale
+    let r = Math.random();
+    let type = 'normal';
+    if(r>0.9) type='tank';
+    else if(r>0.75) type='fast';
+    else if(r>0.6) type='shooter';
+    spawnEnemy(type);
+  }
+}
+
+// bullets home to nearest enemy (triangles)
+function shoot() {
+  // play sound
+  playSnd(sndShoot);
+  // create a bullet with homing behavior
+  bullets.push({ x:player.x, y:player.y, size:12, speed:8, vx:0, vy:0, life:6, rotation:0 });
+}
+
+// power-ups spawn occasionally
+function spawnPowerUp() {
+  const angle = Math.random()*Math.PI*2;
+  const d = 250 + Math.random()*200;
+  powerUps.push({
+    x: player.x + Math.cos(angle)*d,
+    y: player.y + Math.sin(angle)*d,
+    size:18,
+    kind: ['health','rapid','shield'][Math.floor(Math.random()*3)],
+    ttl: 20
+  });
+}
+
+// particles
+function createExplosion(x,y,color,amount=18) {
+  for(let i=0;i<amount;i++){
+    particles.push({
+      x,y,
+      vx: Math.cos(Math.random()*Math.PI*2)*rand(1,4),
+      vy: Math.sin(Math.random()*Math.PI*2)*rand(1,4),
+      life: rand(20,50),
+      color
+    });
+  }
+}
+
+// UI update
+function updateHUD() {
+  document.getElementById('hud').innerText = `Health: ${player.health}  Score: ${score}  Enemies: ${enemies.length}`;
+}
+
+// main game loop & update
+let frame=0;
+function update() {
+  frame++;
+  // player movement hold
+  if(keys['up']||keys['ArrowUp']) player.y -= player.speed;
+  if(keys['down']||keys['ArrowDown']) player.y += player.speed;
+  if(keys['left']||keys['ArrowLeft']) player.x -= player.speed;
+  if(keys['right']||keys['ArrowRight']) player.x += player.speed;
+  // clamp
+  player.x = Math.max(player.r, Math.min(canvas.width-player.r, player.x));
+  player.y = Math.max(player.r, Math.min(canvas.height-player.r, player.y));
+
+  // enemies follow player (wherever you go, they follow every frame)
+  enemies.forEach((e, idx) => {
+    // direction
+    const dx = player.x - e.x;
+    const dy = player.y - e.y;
+    const d = Math.hypot(dx,dy) || 1;
+    e.x += (dx/d) * e.speed;
+    e.y += (dy/d) * e.speed;
+
+    // shooter enemy fires small bullets at player
+    if(e.type==='shooter'){
+      e.shooterTimer -= 1/60;
+      if(e.shooterTimer<=0){
+        e.shooterTimer = 2 + Math.random()*1.5;
+        // spawn an enemy projectile
+        bullets.push({
+          x: e.x, y: e.y, size:8, speed:3.5,
+          vx: (player.x - e.x)/d * 3.5, vy: (player.y - e.y)/d * 3.5,
+          hostile:true, life:6, rotation: Math.atan2(player.y-e.y, player.x-e.x)
+        });
+      }
+    }
+
+    // collision with player
+    if(Math.abs(e.x - player.x) < (e.size/1.3 + player.r) && Math.abs(e.y - player.y) < (e.size/1.3 + player.r)){
+      // hit the player
+      if(player.shield > 0){
+        player.shield -= 1;
+        createExplosion(e.x, e.y, 'rgba(180,220,255,0.9)', 12);
+        playSnd(sndHit);
+      } else {
+        player.health -= 1;
+        playSnd(sndHit);
+      }
+      // enemy takes damage / dies
+      e.hp -= 1;
+      if(e.hp <= 0){
+        createExplosion(e.x, e.y, 'orange', 24);
+        playSnd(sndExpl);
+        score += 10;
+        enemies.splice(idx,1);
+      } else {
+        // push it offscreen a bit
+        e.x -= (dx/d)*40;
+        e.y -= (dy/d)*40;
+      }
+    }
+  });
+
+  // bullets behavior (homing bullets not hostile)
+  bullets.forEach((b,i) => {
+    if(b.hostile){
+      // just move straight
+      b.x += b.vx; b.y += b.vy;
+      b.life--;
+      if(b.life<=0) bullets.splice(i,1);
+      // collide with player
+      if(Math.hypot(b.x-player.x,b.y-player.y) < player.r+6){
+        if(player.shield>0) { player.shield -= 1; playSnd(sndHit); }
+        else { player.health -= 1; playSnd(sndHit); }
+        createExplosion(b.x,b.y,'#f55',8);
+        bullets.splice(i,1);
+      }
+      return;
+    }
+
+    // homing to nearest enemy
+    if(enemies.length>0){
+      let nearest = enemies[0], nd = Math.hypot(enemies[0].x-b.x, enemies[0].y-b.y);
+      for(let j=1;j<enemies.length;j++){
+        let d2 = Math.hypot(enemies[j].x-b.x, enemies[j].y-b.y);
+        if(d2 < nd){ nd = d2; nearest = enemies[j]; }
+      }
+      let dx = nearest.x - b.x, dy = nearest.y - b.y;
+      let d = Math.hypot(dx,dy) || 1;
+      b.vx = (dx/d) * b.speed;
+      b.vy = (dy/d) * b.speed;
+      b.rotation = Math.atan2(b.vy, b.vx);
+      b.x += b.vx;
+      b.y += b.vy;
+
+      // collision with nearest
+      if(Math.abs(nearest.x - b.x) < nearest.size && Math.abs(nearest.y - b.y) < nearest.size){
+        // enemy takes damage
+        nearest.hp -= 1;
+        createExplosion(b.x,b.y,'red',10);
+        playSnd(sndExpl);
+        bullets.splice(i,1);
+        if(nearest.hp <= 0){
+          // kill
+          createExplosion(nearest.x, nearest.y, 'orange', 22);
+          score += 10 + (nearest.type==='tank'?15:0) + (nearest.type==='fast'?5:0);
+          enemies.splice(enemies.indexOf(nearest),1);
+        }
+      }
+    } else {
+      // no enemies: bullets keep flying offscreen
+      b.x += b.vx || 0;
+      b.y += b.vy || 0;
+    }
+
+    // lifetime/out-of-bounds
+    if(b.x < -50 || b.x > canvas.width+50 || b.y < -50 || b.y > canvas.height+50) {
+      bullets.splice(i,1);
+    }
+  });
+
+  // particles update
+  particles.forEach((p,i) => {
+    p.x += p.vx; p.y += p.vy; p.vy += 0.06; p.life--;
+    if(p.life<=0) particles.splice(i,1);
+  });
+
+  // powerUps update
+  powerUps.forEach((p,i) => {
+    p.ttl -= 1/60;
+    // rotate-ish effect handled in draw
+    if(Math.hypot(player.x-p.x, player.y-p.y) < player.r + p.size){
+      // pickup
+      if(p.kind==='health') { player.health = Math.min(6, player.health+1); }
+      else if(p.kind==='rapid') { // rapid-fire: spawn extra bullets quickly for a few seconds
+        // implement as slight auto-fire boost: spawn 5 bullets quickly
+        for(let k=0;k<5;k++){ setTimeout(()=>shoot(), k*120); }
+      }
+      else if(p.kind==='shield'){ player.shield = Math.min(3, player.shield + 2); }
+      playSnd(sndPower);
+      createExplosion(p.x,p.y,'#9f9',10);
+      powerUps.splice(i,1);
+    } else if(p.ttl <= 0) powerUps.splice(i,1);
+  });
+
+  // spawning logic: when not endless, enemies come from initial only; when endless, keep spawning
+  if(endless){
+    // scaling: every 20 seconds, increase spawn pressure
+    if(frame % 60 === 0){
+      spawnTimer++;
+    }
+    // spawn 5 per second in endless mode -> use timer
+    // spawnRate variable not necessary — handled by interval
+  } else {
+    // not endless: nothing automatic (player wins when none left)
+    if (enemies.length === 0) {
+      gameWon();
+      return; // Stop further updates if game is won
+    }
+  }
+
+  // occasional powerup spawn
+  if(frame % (60 * 8) === 0 && Math.random()<0.9) spawnPowerUp();
+
+  // adjust difficulty slowly by adding enemies over time for non-endless - not needed
+  // update HUD
+  updateHUD();
+
+  // check gameover
+  if(player.health <= 0){
+    gameOver();
+  }
+}
+
+// draw
+function draw() {
+  // clear
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // simple grid background slightly animated
+  const t = Date.now()/1000;
+  const gsize = 60;
+  ctx.fillStyle = '#0a4'; // green base
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for(let x = (t*5)%gsize - gsize; x < canvas.width; x+=gsize){
+    ctx.moveTo(x,0); ctx.lineTo(x,canvas.height);
+  }
+  for(let y = (t*5)%gsize - gsize; y < canvas.height; y+=gsize){
+    ctx.moveTo(0,y); ctx.lineTo(canvas.width,y);
+  }
+  ctx.stroke();
+
+  // draw powerUps
+  powerUps.forEach(p=>{
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate((Date.now()/500) % Math.PI*2);
+    ctx.fillStyle = p.kind==='health'?'#f88': (p.kind==='rapid'?'#f6a':'#8ff');
+    ctx.beginPath();
+    ctx.rect(-p.size/2, -p.size/2, p.size, p.size);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // draw enemies (squares)
+  enemies.forEach(e=>{
+    ctx.fillStyle = 'orange';
+    ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+    // HP bar
+    if(e.hp>1){
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 8, e.size, 4);
+      ctx.fillStyle = '#0f0';
+      ctx.fillRect(e.x - e.size/2, e.y - e.size/2 - 8, (e.hp / (e.type==='tank'?3:2)) * e.size, 4);
+    }
+  });
+
+  // draw bullets as rotated triangles (red for player, darker for hostile)
+  bullets.forEach(b=>{
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    const ang = b.rotation || Math.atan2(b.vy||0, b.vx||1);
+    ctx.rotate(ang + Math.PI/2);
+    ctx.fillStyle = b.hostile ? '#440000' : '#c00';
+    ctx.beginPath();
+    ctx.moveTo(0, -b.size/2);
+    ctx.lineTo(-b.size/2, b.size/2);
+    ctx.lineTo(b.size/2, b.size/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // draw player (circle) with shield indicator
+  ctx.beginPath();
+  ctx.fillStyle = 'lightblue';
+  ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
+  ctx.fill();
+  if(player.shield>0){
+    ctx.strokeStyle = 'rgba(200,220,255,0.9)';
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, player.r+8, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.lineWidth = 1;
+  }
+
+  // draw particles
+  particles.forEach(p=>{
+    ctx.fillStyle = p.color || 'white';
+    ctx.globalAlpha = Math.max(0, p.life/60);
+    ctx.fillRect(p.x, p.y, 3, 3);
+    ctx.globalAlpha = 1;
+  });
+
+  // HUD handled separately
+}
+
+// main game tick
+function loop() {
+  if(!gameRunning) return;
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// start game functions
+function startGame(diff) {
+  // difficulty mapping
+  endless = false;
+  clearInterval(endlessInterval);
+  document.getElementById('menu').style.display='none';
+  document.getElementById('victoryScreen').style.display = 'none'; // Ensure victory screen is hidden
+  if(diff==='easy'){ totalToSpawn = 20; player.health=4; player.speed=4; }
+  else if(diff==='medium'){ totalToSpawn=35; player.health=3; player.speed=5; }
+  else { totalToSpawn=50; player.health=2; player.speed=5.2; }
+
+  // reset
+  enemies=[]; bullets=[]; particles=[]; powerUps=[];
+  player.x = canvas.width/2; player.y = canvas.height/2; player.shield=0;
+  score = 0;
+  initSpawn(totalToSpawn);
+
+  // play bg
+  if(soundOn){ bg.currentTime=0; bg.play().catch(()=>{}); }
+  gameRunning = true;
+  requestAnimationFrame(loop);
+}
+
+function startEndless() {
+  endless = true;
+  document.getElementById('menu').style.display='none';
+  document.getElementById('victoryScreen').style.display = 'none'; // Ensure victory screen is hidden
+  enemies=[]; bullets=[]; particles=[]; powerUps=[];
+  player.x = canvas.width/2; player.y = canvas.height/2; player.shield=0;
+  player.health = 3; score = 0;
+  // initial seed
+  initSpawn(10);
+
+  // spawn 5 per second at random positions around the player
+  endlessInterval = setInterval(()=>{
+    for(let i=0;i<5;i++){
+      // choose type with rising difficulty by score
+      let r = Math.random();
+      if(score > 300) r += 0.15;
+      if(r>0.92) spawnEnemy('tank');
+      else if(r>0.78) spawnEnemy('fast');
+      else if(r>0.60) spawnEnemy('shooter');
+      else spawnEnemy('normal');
+    }
+  }, 1000);
+
+  if(soundOn){ bg.currentTime=0; bg.play().catch(()=>{}); }
+  gameRunning = true;
+  requestAnimationFrame(loop);
+}
+
+// game over
+function gameOver() {
+  gameRunning = false;
+  bg.pause();
+  clearInterval(endlessInterval);
+  // save high score
+  if(score > highScore){
+    highScore = score;
+    localStorage.setItem('cs_high', highScore.toString());
+    alert(`Game Over!\nNew High Score: ${score}`);
+  } else {
+    alert(`Game Over!\nScore: ${score}\nHigh Score: ${highScore}`);
+  }
+  location.reload();
+}
+
+// game won
+function gameWon() {
+  gameRunning = false;
+  bg.pause();
+  clearInterval(endlessInterval); // Clear in case it was somehow running
+  if (score > highScore) {
+    highScore = score;
+    localStorage.setItem('cs_high', highScore.toString());
+  }
+  document.getElementById('victoryScore').innerText = score;
+  document.getElementById('victoryScreen').style.display = 'flex';
+}
+
+// return to menu from victory screen
+function returnToMenu() {
+  location.reload(); // Reloads the page to reset game state and show main menu
+}
+
+// show how to play
+function showHow(){
+  alert("HOW TO PLAY:\n- Use arrow buttons (hold) to move.\n- Tap SHOOT to fire homing triangles at nearest enemy.\n- Enemies follow you; orange squares hurt you on contact.\n- Power-ups: Health (pink), Rapid (orange), Shield (cyan).\n- Endless mode spawns enemies continuously.\n- Survive and rack up points!");
+}
+
+// small periodic sounds / fx hooks already added by code
+
+// initial UI bindings
+function setupUI(){
+  // pause/resume on visibility change
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.hidden){ bg.pause(); } else if(gameRunning && soundOn) bg.play().catch(()=>{});
+  });
+}
+setupUI();
+
+// simple auto-fire cooldown so user isn't spammed too fast
+let shootCooldown = false;
+setInterval(()=>shootCooldown=false, 120); // allow a shot every 120ms
+
+// throttle shoot function to avoid spamming
+const origShoot = shoot;
+shoot = function(){
+  if(shootCooldown) return;
+  shootCooldown = true;
+  origShoot();
+};
+
+// expose start functions to buttons
+window.startGame = startGame;
+window.startEndless = startEndless;
+window.setVolume = setVolume;
+window.showHow = showHow;
+window.returnToMenu = returnToMenu; // Expose returnToMenu
+
+// ensure first-touch allows audio play on mobile
+document.getElementById('menu').addEventListener('click', ()=>{ if(soundOn) bg.play().catch(()=>{}); });
+
+// final: small tick to increment score over time+scaling
+setInterval(()=>{
+  if(!gameRunning) return;
+  // reward for survival
+  score += 1;
+  // progressively increase enemy speeds slightly in endless mode
+  if(endless && frame % (60*5) === 0){
+    enemies.forEach(e=> e.speed *= 1.02 );
+  }
+}, 1000);
+
+</script>
+</body>
+</html>
