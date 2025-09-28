@@ -52,7 +52,7 @@
           <input id="vol" type="range" min="0" max="1" step="0.01" value="0.6" style="width:140px" onchange="setVolume(this.value)" />
         </div>
         <div style="margin-top:10px;color:#ccc;font-size:13px">High Score: <span id="hs">0</span></div>
-        <div style="margin-top:10px;">
+        <div style="margin-top:10px; display:flex; gap: 8px; justify-content:center;">
           <button onclick="showHow()" class="small">How to Play</button>
           <button onclick="toggleComputerMode()" id="computerModeBtn" class="small">Computer Mode: Off</button>
         </div>
@@ -121,6 +121,7 @@ let spawnTimer = 0, spawnRate = 0;
 let endlessInterval = null;
 let volume = parseFloat(document.getElementById('vol').value);
 let soundOn = true;
+let computerModeEnabled = false; // New state variable for computer mode
 
 // Audio elements
 const bg = document.getElementById('bg');
@@ -252,8 +253,12 @@ function update() {
     const dx = player.x - e.x;
     const dy = player.y - e.y;
     const d = Math.hypot(dx,dy) || 1;
-    e.x += (dx/d) * e.speed;
-    e.y += (dy/d) * e.speed;
+    let currentEnemySpeed = e.speed;
+    if (computerModeEnabled) {
+      currentEnemySpeed *= 0.5; // Reduce speed by 50%
+    }
+    e.x += (dx/d) * currentEnemySpeed;
+    e.y += (dy/d) * currentEnemySpeed;
 
     // shooter enemy fires small bullets at player
     if(e.type==='shooter'){
@@ -591,6 +596,13 @@ function showHow(){
   alert("HOW TO PLAY:\n- Use arrow buttons (hold) to move.\n- Tap SHOOT to fire homing triangles at nearest enemy.\n- Enemies follow you; orange squares hurt you on contact.\n- Power-ups: Health (pink), Rapid (orange), Shield (cyan).\n- Endless mode spawns enemies continuously.\n- Survive and rack up points!");
 }
 
+// toggle computer mode
+function toggleComputerMode() {
+  computerModeEnabled = !computerModeEnabled;
+  document.getElementById('computerModeBtn').innerText = 'Computer Mode: ' + (computerModeEnabled ? 'On' : 'Off');
+}
+
+
 // small periodic sounds / fx hooks already added by code
 
 // initial UI bindings
@@ -620,6 +632,7 @@ window.startEndless = startEndless;
 window.setVolume = setVolume;
 window.showHow = showHow;
 window.returnToMenu = returnToMenu; // Expose returnToMenu
+window.toggleComputerMode = toggleComputerMode; // Expose new computer mode toggle
 
 // ensure first-touch allows audio play on mobile
 document.getElementById('menu').addEventListener('click', ()=>{ if(soundOn) bg.play().catch(()=>{}); });
