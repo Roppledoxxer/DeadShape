@@ -647,7 +647,160 @@ setInterval(()=>{
     enemies.forEach(e=> e.speed *= 1.02 );
   }
 }, 1000);
+/* ====== NEW ABILITIES: Orbit Blade + Rocket ====== */
+let orbitBlade = null; // {angle, progress, active}
+let orbitCooldown = false;
+let rocketCooldown = false;
+let rockets = []; // store active rockets
 
+// create Orbit Blade button
+const orbitBtn = document.createElement('button');
+orbitBtn.id = 'orbitBtn';
+orbitBtn.innerText = 'Orbit Blade';
+orbitBtn.style.position = 'absolute';
+orbitBtn.style.left = '12px';
+orbitBtn.style.bottom = 'calc(12px + var(--ui-size)*1.3 + 8px)';
+orbitBtn.style.width = 'calc(var(--ui-size)*1.2)';
+orbitBtn.style.height = 'calc(var(--ui-size)*1.2)';
+orbitBtn.style.fontSize = '16px';
+orbitBtn.style.borderRadius = '14px';
+orbitBtn.style.pointerEvents = 'auto';
+document.getElementById('gameWrap').appendChild(orbitBtn);
+
+// create Rocket button
+const rocketBtn = document.createElement('button');
+rocketBtn.id = 'rocketBtn';
+rocketBtn.innerText = 'Rocket';
+rocketBtn.style.position = 'absolute';
+rocketBtn.style.left = 'calc(12px + var(--ui-size)*1.3 + 8px)';
+rocketBtn.style.bottom = '12px';
+rocketBtn.style.width = 'calc(var(--ui-size)*1.2)';
+rocketBtn.style.height = 'calc(var(--ui-size)*1.2)';
+rocketBtn.style.fontSize = '16px';
+rocketBtn.style.borderRadius = '14px';
+rocketBtn.style.pointerEvents = 'auto';
+document.getElementById('gameWrap').appendChild(rocketBtn);
+
+// orbit blade activation
+orbitBtn.addEventListener('click', ()=>{
+  if(orbitCooldown || orbitBlade) return;
+  orbitBlade = { angle:0, progress:0, speed:0.3, radius: player.r*1.5 }; // fast rotation
+  orbitCooldown = true;
+  setTimeout(()=>{ orbitCooldown=false; }, 3000);
+});
+
+// rocket activation
+rocketBtn.addEventListener('click', ()=>{
+  if(rocketCooldown) return;
+  rocketCooldown = true;
+  setTimeout(()=>{ rocketCooldown=false; }, 3000);
+  // spawn a rocket
+  if(enemies.length>0){
+    let nearest = enemies[0];
+    let nd = Math.hypot(nearest.x-player.x, nearest.y-player.y);
+    for(let j=1;j<enemies.length;j++){
+      let d2 = Math.hypot(enemies[j].x-player.x, enemies[j].y-player.y);
+      if(d2<nd){ nd=d2; nearest=enemies[j]; }
+    }
+    const dx = nearest.x - player.x;
+    const dy = nearest.y - player.y;
+    const dist = Math.hypot(dx,dy) || 1;
+    rockets.push({
+      x: player.x,
+      y: player.y,
+      vx: (dx/dist)*6,
+      vy: (dy/dist)*6,
+      size:14
+    });
+  }
+});
+
+// update orbit blade and rockets inside main update()
+const origUpdate = update;
+update = function() {
+  origUpdate();
+
+  // orbit blade update
+  if(orbitBlade){
+    orbitBlade.angle += orbitBlade.speed;
+    orbitBlade.progress += orbitBlade.speed;
+    // calculate position around player
+    const ox = player.x + Math.cos(orbitBlade.angle)*orbitBlade.radius;
+    const oy = player.y + Math.sin(orbitBlade.angle)*orbitBlade.radius;
+    // collision with enemies
+    enemies.forEach((e, idx)=>{
+      if(Math.abs(e.x-ox)<e.size && Math.abs(e.y-oy)<e.size){
+        e.hp -= 1;
+        createExplosion(ox,oy,'#888',6);
+        playSnd(sndExpl);
+        if(e.hp<=0){
+          createExplosion(e.x,e.y,'orange',22);
+          score += 10 + (e.type==='tank'?15:0) + (e.type==='fast'?5:0);
+          enemies.splice(idx,1);
+        }
+      }
+    });
+    // remove after full rotation (2*PI)
+    if(orbitBlade.progress >= Math.PI*2){
+      orbitBlade = null;
+    }
+  }
+
+  // rockets update
+  rockets.forEach((r,i)=>{
+    r.x += r.vx;
+    r.y += r.vy;
+    // collide with enemies
+    enemies.forEach((e, idx)=>{
+      if(Math.abs(e.x-r.x)<e.size && Math.abs(e.y-r.y)<e.size){
+        e.hp -= 2; // rocket stronger than bullet
+        createExplosion(r.x,r.y,'yellow',12);
+        playSnd(sndExpl);
+        if(e.hp<=0){
+          createExplosion(e.x,e.y,'orange',22);
+          score += 10 + (e.type==='tank'?15:0) + (e.type==='fast'?5:0);
+          enemies.splice(idx,1);
+        }
+        rockets.splice(i,1);
+      }
+    });
+    // remove if offscreen
+    if(r.x < -50 || r.x > canvas.width+50 || r.y < -50 || r.y > canvas.height+50){
+      rockets.splice(i,1);
+    }
+  });
+};
+
+// draw orbit blade and rockets inside main draw()
+const origDraw = draw;
+draw = function() {
+  origDraw();
+
+  // draw orbit blade
+  if(orbitBlade){
+    const ox = player.x + Math.cos(orbitBlade.angle)*orbitBlade.radius;
+    const oy = player.y + Math.sin(orbitBlade.angle)*orbitBlade.radius;
+    ctx.save();
+    ctx.translate(ox,oy);
+    ctx.rotate(orbitBlade.angle + Math.PI/2);
+    ctx.fillStyle = 'gray';
+    ctx.beginPath();
+    ctx.moveTo(0,-player.r/2);
+    ctx.lineTo(-player.r/4,player.r/4);
+    ctx.lineTo(player.r/4,player.r/4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  // draw rockets
+  rockets.forEach(r=>{
+    ctx.beginPath();
+    ctx.fillStyle = 'yellow';
+    ctx.arc(r.x,r.y,r.size/2,0,Math.PI*2);
+    ctx.fill();
+  });
+};
 </script>
 </body>
 </html>
