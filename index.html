@@ -635,7 +635,9 @@ window.returnToMenu = returnToMenu; // Expose returnToMenu
 window.toggleComputerMode = toggleComputerMode; // Expose new computer mode toggle
 
 // ensure first-touch allows audio play on mobile
-document.getElementById('menu').addEventListener('click', ()=>{ if(soundOn) bg.play().catch(()=>{}); });
+// Removed the general menu click handler to prevent music from playing
+// when interacting with menu elements other than difficulty buttons.
+// The startGame and startEndless functions already handle playing music.
 
 // final: small tick to increment score over time+scaling
 setInterval(()=>{
