@@ -7,7 +7,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>DeadShape</title>
 <style>
-  :root{--ui-size:60px}
+  :root{
+    --ui-size:60px;
+    --footer-height: 25px; /* Approximate height of the footer */
+    --controls-base-offset: calc(var(--footer-height) + 15px); /* Space above footer */
+    --controls-side-margin: 12px;
+    --controls-button-size: var(--ui-size); /* Standard button size for d-pad */
+    --special-button-size: calc(var(--ui-size) * 1.1); /* Slightly larger for action buttons */
+    --controls-spacing: 10px; /* Gap between control buttons */
+  }
   html,body{height:100%;margin:0;font-family:Inter,Arial; -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color: transparent;}
   #gameWrap{position:fixed;inset:0;background:green;display:flex;align-items:stretch;justify-content:center}
   canvas{display:block;width:100%;height:100%;}
@@ -17,19 +25,204 @@
     pointer-events: none;
   }
   .menu {
-    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.45);
-    flex-direction:column; gap:12px; z-index:40; font-size:18px; color:#fff;
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.8);
+    flex-direction:column; gap:12px; z-index:40; font-size:18px; color:#ddd;
   }
-  .menu .box {background:#222; padding:20px;border-radius:12px; text-align:center; width:90%; max-width:420px;}
-  .menu button {pointer-events:auto; font-size:18px; padding:10px 16px; margin:6px; border-radius:8px; border: none; cursor:pointer;}
-  .hud { position:absolute; left:12px; top:12px; color:#000; font-weight:bold; font-size:18px; background: rgba(255,255,255,0.75); padding:6px 8px; border-radius:8px; pointer-events:none;}
-  #controls { position:absolute; right:12px; bottom:12px; width: calc(var(--ui-size)*2 + 20px); pointer-events:auto; }
-  #controls .col { display:flex; flex-direction:column; gap:8px; align-items:center; }
-  #controls button { width:var(--ui-size); height:var(--ui-size); border-radius:12px; font-size:22px; border:none; background:rgba(255,255,255,0.95);}
-  #shootBtn { position:absolute; left:12px; bottom:12px; pointer-events:auto; width:calc(var(--ui-size)*1.2); height:calc(var(--ui-size)*1.2); font-size:20px; border-radius:14px;}
+  .menu .box {
+    background: linear-gradient(135deg, #222, #000);
+    padding:20px;
+    border-radius:12px;
+    text-align:center;
+    width:90%;
+    max-width:420px;
+    box-shadow: 0 0 15px rgba(0,0,0,0.7);
+    border: 1px solid rgba(80,80,80,0.5);
+  }
+  .menu h1 {
+    color: #eee;
+    text-shadow: 0 0 5px rgba(200,200,200,0.4);
+    margin-bottom: 10px;
+    font-size: 2.2em;
+  }
+  .menu button {
+    pointer-events:auto;
+    font-size:18px;
+    padding:10px 16px;
+    margin:6px;
+    border-radius:8px;
+    border: 1px solid rgba(100,100,100,0.6);
+    cursor:pointer;
+    background: linear-gradient(45deg, #444, #222);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+    transition: all 0.2s ease-in-out;
+  }
+  .menu button:hover {
+    background: linear-gradient(45deg, #555, #333);
+    box-shadow: 0 0 12px rgba(0,0,0,0.7);
+    transform: translateY(-2px);
+  }
+  .hud {
+    position:absolute;
+    left:12px;
+    top:12px;
+    color:#ccc;
+    font-weight:bold;
+    font-size:18px;
+    background: rgba(0,0,0,0.7);
+    padding:8px 10px;
+    border-radius:8px;
+    pointer-events:none;
+    border: 1px solid rgba(80,80,80,0.3);
+    box-shadow: 0 0 6px rgba(0,0,0,0.4);
+  }
+  #controls { /* D-pad container (right side) */
+    position:absolute;
+    right:calc(var(--controls-side-margin) + 30px); /* Moved slightly left */
+    bottom:var(--controls-base-offset);
+    width: calc(var(--controls-button-size) * 2 + var(--controls-spacing));
+    pointer-events:auto;
+    display:flex; /* Ensure flex for centering */
+    flex-direction: column; /* Stack 'up' and 'left/down/right' */
+    align-items: center; /* Center horizontally */
+    gap: var(--controls-spacing);
+  }
+  #controls .col { /* This refers to the inner .col div containing the D-pad buttons */
+    display:flex;
+    flex-direction:column;
+    gap:var(--controls-spacing);
+    align-items:center;
+  }
+  #controls .col > div { /* The div that wraps left/down/right buttons */
+    display:flex;
+    gap:var(--controls-spacing);
+  }
+  #controls button {
+    width:var(--controls-button-size);
+    height:var(--controls-button-size);
+    border-radius:12px;
+    font-size:22px;
+    border:1px solid rgba(80,80,80,0.6);
+    background: linear-gradient(45deg, #555, #333);
+    color: #eee;
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+    transition: all 0.2s ease-in-out;
+  }
+  #controls button:hover {
+    background: linear-gradient(45deg, #666, #444);
+    box-shadow: 0 0 12px rgba(0,0,0,0.7);
+    transform: translateY(-2px);
+  }
+
+  /* Left-side action buttons container */
+  #left-controls {
+    position: absolute;
+    left: var(--controls-side-margin);
+    bottom: var(--controls-base-offset);
+    display: flex;
+    flex-direction: column-reverse; /* Stack from bottom up */
+    gap: var(--controls-spacing);
+    pointer-events: auto;
+  }
+  .action-button {
+    width:var(--special-button-size);
+    height:var(--special-button-size);
+    font-size:16px;
+    border-radius:14px;
+    color: #fff;
+    box-shadow: 0 0 10px rgba(0,0,0,0.6);
+    transition: all 0.2s ease-in-out;
+    cursor:pointer;
+    border: none; /* Reset individual button border to be handled by specific class */
+    pointer-events: auto;
+  }
+  .action-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 15px rgba(0,0,0,0.8);
+  }
+
+  #shootBtn {
+    border: 1px solid rgba(150,50,50,0.6);
+    background: linear-gradient(45deg, #8B0000, #660000);
+  }
+  #shootBtn:hover {
+    background: linear-gradient(45deg, #A00000, #8B0000);
+  }
+
+  #orbitBtn {
+    border: 1px solid rgba(100,100,100,0.6);
+    background: linear-gradient(45deg, #444, #222);
+  }
+  #orbitBtn:hover {
+    background: linear-gradient(45deg, #555, #333);
+  }
+
+  #rocketBtn {
+    border: 1px solid rgba(150,100,50,0.6);
+    background: linear-gradient(45deg, #A0522D, #8B4513);
+  }
+  #rocketBtn:hover {
+    background: linear-gradient(45deg, #CD5C5C, #A0522D);
+  }
+
+  /* Shared button styles */
   .small { font-size:12px; padding:6px 8px; }
-  #soundToggle { position:absolute; right:12px; top:12px; pointer-events:auto; }
-  .floatingHint { position:absolute; left:50%; transform:translateX(-50%); bottom:20px; color:#fff; font-size:12px; background:rgba(0,0,0,0.5); padding:6px 10px; border-radius:12px;}
+  #soundToggle {
+    position:absolute;
+    right:12px;
+    top:12px;
+    pointer-events:auto;
+    border: 1px solid rgba(80,80,80,0.4);
+    background: rgba(0,0,0,0.7);
+    color: #ccc;
+    border-radius: 8px;
+    padding: 6px 10px;
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    transition: all 0.2s ease-in-out;
+  }
+  #soundToggle:hover {
+    background: rgba(20,20,20,0.9);
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+    transform: translateY(-1px);
+  }
+  /* .floatingHint { This element is removed, so its styles are no longer needed } */
+  hr { border-color: rgba(100,100,100,0.15); }
+  .menu p { color: #aaa; }
+  .menu a { color: #88a; text-decoration: none; }
+  .menu a:hover { color: #aab; text-decoration: underline; }
+
+  /* Adjust victory screen to match menu style */
+  #victoryScreen .box {
+    background: linear-gradient(135deg, #222, #000);
+    box-shadow: 0 0 15px rgba(0,0,0,0.7);
+    border: 1px solid rgba(80,80,80,0.5);
+  }
+  #victoryScreen h1 {
+    color: #eee;
+    text-shadow: 0 0 5px rgba(200,200,200,0.4);
+  }
+  #victoryScreen button {
+    background: linear-gradient(45deg, #444, #222);
+    color: #fff;
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+    border: 1px solid rgba(100,100,100,0.6);
+  }
+  #victoryScreen button:hover {
+    background: linear-gradient(45deg, #555, #333);
+    box-shadow: 0 0 12px rgba(0,0,0,0.7);
+  }
+
+  footer {
+    position: fixed;
+    bottom: 2px;
+    width: 100%;
+    text-align: center;
+    font-size: 10px;
+    color: #fff;
+    background: transparent;
+    z-index: 9999;
+    pointer-events: none;
+  }
 </style>
 </head>
 <body>
@@ -39,7 +232,7 @@
     <div id="menu" class="menu">
       <div class="box">
         <h1>Rᵒᵖᵖˡᵉᵈᵒˣˣᵉʳ <br> DΞΛD SHΛPΞ©</h1>
-        <p><a href="https://roppledoxxer.github.io/DeadShape.LICENSE/" target="_blank" rel="noopener noreferrer" style="color:#9cf; text-decoration:underline; pointer-events:auto;">LICENSE</a></p>
+        <p><a href="https://roppledoxxer.github.io/DeadShape.LICENSE/" target="_blank" rel="noopener noreferrer">LICENSE</a></p>
         <div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">
           <button onclick="startGame('easy')">Easy</button>
           <button onclick="startGame('medium')">Medium</button>
@@ -70,10 +263,11 @@
 
     <div class="hud" id="hud">Health: 3 &nbsp; Score: 0</div>
 
+    <!-- Right-side D-pad controls -->
     <div id="controls">
       <div class="col">
         <button id="up">↑</button>
-        <div style="display:flex;gap:8px">
+        <div>
           <button id="left">←</button>
           <button id="down">↓</button>
           <button id="right">→</button>
@@ -81,9 +275,14 @@
       </div>
     </div>
 
-    <button id="shootBtn">Shoot</button>
+    <!-- Left-side action buttons -->
+    <div id="left-controls">
+      <button id="rocketBtn" class="action-button">Rocket</button>
+      <button id="orbitBtn" class="action-button">Orbit Blade</button>
+      <button id="shootBtn" class="action-button">Shoot</button>
+    </div>
+
     <button id="soundToggle" class="small">Sound: On</button>
-    <div class="floatingHint">Tap controls or use keyboard. Hold arrows to move.</div>
   </div>
 </div>
 
@@ -416,12 +615,17 @@ function draw() {
   // clear
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // simple grid background slightly animated
+  // Background texture (gradient)
+  let bgGradient = ctx.createRadialGradient(canvas.width/2, canvas.height/2, 0, canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)/1.5);
+  bgGradient.addColorStop(0, '#0a4'); // Darker center
+  bgGradient.addColorStop(1, '#052'); // Lighter edges
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Original grid, maybe slightly adjusted color/opacity
   const t = Date.now()/1000;
   const gsize = 60;
-  ctx.fillStyle = '#0a4'; // green base
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.strokeStyle = 'rgba(0,0,0,0.06)';
+  ctx.strokeStyle = 'rgba(0,0,0,0.1)'; // Slightly more visible grid lines
   ctx.lineWidth = 1;
   ctx.beginPath();
   for(let x = (t*5)%gsize - gsize; x < canvas.width; x+=gsize){
@@ -437,17 +641,61 @@ function draw() {
     ctx.save();
     ctx.translate(p.x,p.y);
     ctx.rotate((Date.now()/500) % Math.PI*2);
-    ctx.fillStyle = p.kind==='health'?'#f88': (p.kind==='rapid'?'#f6a':'#8ff');
+    
+    let powerUpGradient;
+    let shadowColor;
+    if(p.kind==='health'){
+      powerUpGradient = ctx.createRadialGradient(0,0,0,0,0,p.size/2);
+      powerUpGradient.addColorStop(0, 'white');
+      powerUpGradient.addColorStop(1, '#f88');
+      shadowColor = '#f88';
+    } else if (p.kind==='rapid'){
+      powerUpGradient = ctx.createRadialGradient(0,0,0,0,0,p.size/2);
+      powerUpGradient.addColorStop(0, 'white');
+      powerUpGradient.addColorStop(1, '#f6a');
+      shadowColor = '#f6a';
+    } else { // shield
+      powerUpGradient = ctx.createRadialGradient(0,0,0,0,0,p.size/2);
+      powerUpGradient.addColorStop(0, 'white');
+      powerUpGradient.addColorStop(1, '#8ff');
+      shadowColor = '#8ff';
+    }
+    ctx.fillStyle = powerUpGradient;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = shadowColor;
     ctx.beginPath();
     ctx.rect(-p.size/2, -p.size/2, p.size, p.size);
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
   });
 
   // draw enemies (squares)
   enemies.forEach(e=>{
-    ctx.fillStyle = 'orange';
+    let enemyGradient;
+    if(e.type === 'tank'){
+      enemyGradient = ctx.createLinearGradient(e.x-e.size/2, e.y, e.x+e.size/2, e.y);
+      enemyGradient.addColorStop(0, '#8B0000'); // Dark red
+      enemyGradient.addColorStop(1, '#FF4500'); // Orange-red
+    } else if (e.type === 'fast'){
+      enemyGradient = ctx.createLinearGradient(e.x-e.size/2, e.y, e.x+e.size/2, e.y);
+      enemyGradient.addColorStop(0, '#00CED1'); // Dark cyan
+      enemyGradient.addColorStop(1, '#00FFFF'); // Cyan
+    } else if (e.type === 'shooter'){
+      enemyGradient = ctx.createLinearGradient(e.x-e.size/2, e.y, e.x+e.size/2, e.y);
+      enemyGradient.addColorStop(0, '#4B0082'); // Indigo
+      enemyGradient.addColorStop(1, '#9400D3'); // Dark violet
+    } else { // normal
+      enemyGradient = ctx.createLinearGradient(e.x-e.size/2, e.y, e.x+e.size/2, e.y);
+      enemyGradient.addColorStop(0, '#FFA500'); // Orange
+      enemyGradient.addColorStop(1, '#FFD700'); // Gold
+    }
+    ctx.fillStyle = enemyGradient;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(255,165,0,0.8)'; // Orange glow
     ctx.fillRect(e.x - e.size/2, e.y - e.size/2, e.size, e.size);
+    ctx.shadowBlur = 0;
+
     // HP bar
     if(e.hp>1){
       ctx.fillStyle = 'rgba(0,0,0,0.5)';
@@ -463,36 +711,64 @@ function draw() {
     ctx.translate(b.x, b.y);
     const ang = b.rotation || Math.atan2(b.vy||0, b.vx||1);
     ctx.rotate(ang + Math.PI/2);
-    ctx.fillStyle = b.hostile ? '#440000' : '#c00';
+    
+    let bulletGradient;
+    if (b.hostile) {
+      bulletGradient = ctx.createLinearGradient(0, -b.size/2, 0, b.size/2);
+      bulletGradient.addColorStop(0, '#FF6347'); // Tomato
+      bulletGradient.addColorStop(1, '#8B0000'); // Dark Red
+    } else {
+      bulletGradient = ctx.createLinearGradient(0, -b.size/2, 0, b.size/2);
+      bulletGradient.addColorStop(0, '#FFFF00'); // Yellow
+      bulletGradient.addColorStop(1, '#FFD700'); // Gold
+    }
+    ctx.fillStyle = bulletGradient;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = b.hostile ? '#FF6347' : '#FFFF00';
     ctx.beginPath();
     ctx.moveTo(0, -b.size/2);
     ctx.lineTo(-b.size/2, b.size/2);
     ctx.lineTo(b.size/2, b.size/2);
     ctx.closePath();
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
   });
 
   // draw player (circle) with shield indicator
+  let playerGradient = ctx.createRadialGradient(player.x, player.y, 0, player.x, player.y, player.r);
+  playerGradient.addColorStop(0, 'white');
+  playerGradient.addColorStop(0.5, 'lightblue');
+  playerGradient.addColorStop(1, 'deepskyblue');
+  ctx.fillStyle = playerGradient;
+  ctx.shadowBlur = 15;
+  ctx.shadowColor = 'deepskyblue';
   ctx.beginPath();
-  ctx.fillStyle = 'lightblue';
   ctx.arc(player.x, player.y, player.r, 0, Math.PI*2);
   ctx.fill();
+  ctx.shadowBlur = 0; // Reset shadow
+  
   if(player.shield>0){
     ctx.strokeStyle = 'rgba(200,220,255,0.9)';
     ctx.lineWidth = 6;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = 'white';
     ctx.beginPath();
     ctx.arc(player.x, player.y, player.r+8, 0, Math.PI*2);
     ctx.stroke();
     ctx.lineWidth = 1;
+    ctx.shadowBlur = 0; // Reset shadow
   }
 
   // draw particles
   particles.forEach(p=>{
     ctx.fillStyle = p.color || 'white';
     ctx.globalAlpha = Math.max(0, p.life/60);
+    ctx.shadowBlur = 5;
+    ctx.shadowColor = p.color || 'white';
     ctx.fillRect(p.x, p.y, 3, 3);
     ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0; // Reset shadow
   });
 
   // HUD handled separately
@@ -655,44 +931,18 @@ let orbitCooldown = false;
 let rocketCooldown = false;
 let rockets = []; // store active rockets
 
-// create Orbit Blade button
-const orbitBtn = document.createElement('button');
-orbitBtn.id = 'orbitBtn';
-orbitBtn.innerText = 'Orbit Blade';
-orbitBtn.style.position = 'absolute';
-orbitBtn.style.left = '12px';
-orbitBtn.style.bottom = 'calc(12px + var(--ui-size)*1.3 + 8px)';
-orbitBtn.style.width = 'calc(var(--ui-size)*1.2)';
-orbitBtn.style.height = 'calc(var(--ui-size)*1.2)';
-orbitBtn.style.fontSize = '16px';
-orbitBtn.style.borderRadius = '14px';
-orbitBtn.style.pointerEvents = 'auto';
-document.getElementById('gameWrap').appendChild(orbitBtn);
+// Original orbitBtn and rocketBtn creation removed from JS
+// as they are now in the HTML with CSS classes.
+// event listeners for the new buttons need to be set up:
 
-// create Rocket button
-const rocketBtn = document.createElement('button');
-rocketBtn.id = 'rocketBtn';
-rocketBtn.innerText = 'Rocket';
-rocketBtn.style.position = 'absolute';
-rocketBtn.style.left = 'calc(12px + var(--ui-size)*1.3 + 8px)';
-rocketBtn.style.bottom = '12px';
-rocketBtn.style.width = 'calc(var(--ui-size)*1.2)';
-rocketBtn.style.height = 'calc(var(--ui-size)*1.2)';
-rocketBtn.style.fontSize = '16px';
-rocketBtn.style.borderRadius = '14px';
-rocketBtn.style.pointerEvents = 'auto';
-document.getElementById('gameWrap').appendChild(rocketBtn);
-
-// orbit blade activation
-orbitBtn.addEventListener('click', ()=>{
+document.getElementById('orbitBtn').addEventListener('click', ()=>{
   if(orbitCooldown || orbitBlade) return;
   orbitBlade = { angle:0, progress:0, speed:0.3, radius: player.r*1.5 }; // fast rotation
   orbitCooldown = true;
   setTimeout(()=>{ orbitCooldown=false; }, 3000);
 });
 
-// rocket activation
-rocketBtn.addEventListener('click', ()=>{
+document.getElementById('rocketBtn').addEventListener('click', ()=>{
   if(rocketCooldown) return;
   rocketCooldown = true;
   setTimeout(()=>{ rocketCooldown=false; }, 3000);
@@ -785,37 +1035,51 @@ draw = function() {
     ctx.save();
     ctx.translate(ox,oy);
     ctx.rotate(orbitBlade.angle + Math.PI/2);
-    ctx.fillStyle = 'purple';
+    
+    let bladeGradient = ctx.createLinearGradient(0, -player.r/2, 0, player.r/4);
+    bladeGradient.addColorStop(0, '#708090'); // SlateGray
+    bladeGradient.addColorStop(1, '#4A4A4A'); // Darker Gray
+    ctx.fillStyle = bladeGradient;
+    ctx.shadowBlur = 8;
+    ctx.shadowColor = 'rgba(112,128,144,0.6)'; // Subtle gray glow
     ctx.beginPath();
     ctx.moveTo(0,-player.r/2);
     ctx.lineTo(-player.r/4,player.r/4);
     ctx.lineTo(player.r/4,player.r/4);
     ctx.closePath();
     ctx.fill();
+    ctx.shadowBlur = 0;
     ctx.restore();
   }
 
   // draw rockets
   rockets.forEach(r=>{
+    let rocketGradient = ctx.createRadialGradient(r.x,r.y,0,r.x,r.y,r.size/2);
+    rocketGradient.addColorStop(0, 'white');
+    rocketGradient.addColorStop(0.5, '#D2B48C'); // Tan
+    rocketGradient.addColorStop(1, '#8B4513'); // SaddleBrown
+    ctx.fillStyle = rocketGradient;
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = '#8B4513';
     ctx.beginPath();
-    ctx.fillStyle = 'yellow';
     ctx.arc(r.x,r.y,r.size/2,0,Math.PI*2);
     ctx.fill();
+    ctx.shadowBlur = 0;
   });
 };
 </script>
 <footer style="
     position: fixed;
-    bottom: 2px;        /* very close to bottom */
+    bottom: 2px;
     width: 100%;
     text-align: center;
-    font-size: 10px;    /* tiny text */
-    color: #fff;        /* or gray */
-    background: transparent; /* no background bubble */
+    font-size: 10px;
+    color: #fff;
+    background: transparent;
     z-index: 9999;
-    pointer-events: none; /* won’t block clicks */
+    pointer-events: none;
 ">
-    © 2025 Roppledoxxer. All rights reserved. No one may copy without explicit permission.
+© 2025 Roppledoxxer. All rights reserved.
 </footer>
 </body>
 </html>
